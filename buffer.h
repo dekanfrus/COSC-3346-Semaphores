@@ -5,15 +5,7 @@ typedef int buffer_item;
 
 #define BUFFER_SIZE 5
 
-bool buffer_insert_item( buffer_item item )
-{
-	if(count >= BUFFER_SIZE)
-	{
-		maxCount++;
-		return false;
-	}
-	
-
-bool buffer_remove_item( buffer_item *item );
+int buffer_insert_item(buffer_item item);
+int buffer_remove_item( buffer_item *item );
 
 #endif // _BUFFER_H_DEFINED_

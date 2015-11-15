@@ -2,7 +2,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <semaphore.h>
+#include <list>
+#include <iostream>
+
+#define MAX_THREADS 512;
+
+using namespace std;
 
 buffer_item buffer[BUFFER_SIZE];
 
@@ -16,58 +23,166 @@ pthread_mutex_init(&display, NULL);
 
 int mainSleep, threadSleep = 0;
 int producerThreads, consumerThreads = 0;
-int writePtr, readPtr;
-int maxCount, minCount = 0;
+int producePtr, consumePtr;
+int count, maxCount, minCount = 0;
+int produceTid[MAX_THREADS];
+int consumeTid[MAX_THREADS];
+
+list<int> pThread, cThread;
 
 string snapshot = "";
 
 bool displaySnapshot = false;
+bool run = true;
 
+int buffer_remove_item(buffer_item *item)
+{
+	int consumedValue;
+
+	sem_wait(&full);
+
+	if (count == 0)
+	{
+		minCount++;
+		if (displaySnapshot == 1)
+		{
+			pthread_mutex_lock(&display);
+			cout << "All buffers empty. Consumer " << *item << " waits." << endl;
+			pthread_mutex_unlock(&display);
+		}
+
+		return -1;
+	}
+	consumedValue = buffer[consumePtr];
+	consumePtr = (consumePtr + 1) % BUFFER_SIZE;
+	count--;
+
+	sem_post(&empty);
+
+	return consumedValue;
+}
+
+
+int buffer_insert_item(buffer_item item)
+{
+	sem_wait(&empty);
+	if (count >= BUFFER_SIZE)
+	{
+		maxCount++;
+		return 0;
+	}
+
+	buffer[producePtr] = item;
+	writePtr = (producePtr + 1) % BUFFER_SIZE;
+
+	count++;
+	sem_post(&full);
+}
+
+bool getPrime(number);
+{
+	bool prime = false;
+
+	// Check number for prime. Set the bool accordingly
+
+	if (prime)
+	{
+		return true;
+	}
+	else if (!prime)
+	{
+		return false;
+	}
+}
 void dispBuf()
 {
 
+
 }
 
-void *consume(void *num)
+void *consume(void *ctid)
 {
+	buffer_item number;
 
+	while (run == true)
+	{
+		sem_wait(&full);
+		sem_wait(&mutex);
+
+		number = buffer_remove_item(ctid);
+
+		if (displaySnapshot == true)
+		{
+			pthread_mutex_lock(&display);
+			cout << "Consume " << tid << " reads " << numConsume;
+			if (getPrime(number))
+			{
+				cout << "* * * PRIME * * *" << endl;
+			}
+			else
+			{
+				cout << endl;
+			}
+
+			dispBuf();
+			pthread_mutex_unlocked(&display);
+		}
+
+		sem_post(&mutex);
+		sem_post(&full);
+
+		cThread.push[ctid];
+
+		usleep(threadSleep);
+	}
+	
+
+
+	pthread_exit(0);
 }
 
-void *produce(void *num)
+void *produce(void *ptid)
 {
 	buffer_item number;
 	int randomNum, tid;
 
-	tid = *num;
+	tid = *ptid;
 
-	do
+	while (run == true)
 	{
 		number = rand() % 500;
 		sem_wait(&mutex);
 
 		buffer_insert_item(number);
 
-		sem_wait(&mutex);
-		sem_wait(&full);
+		sem_post(&mutex);
+		sem_post(&full);
 
 		if (displaySnapshot == true)
 		{
 			pthread_mutex_lock(&display);
-			cout << "Producer " << tid << " produces " << num << endl;
+			cout << "Producer " << tid << " writes " << number << endl;
 			dispBuf();
 			pthread_mutex_unlock(&display);
 		}
+
+		pThread.push[tid];
 		usleep(threadSleep);
-		// Increment the number of threads that produced and its thread id
-	} while (true);
+		
+	}
 
 	pthread_exit(0);
 }
 
-void dispSu
+void dispSum
 
 int main(int argc, char *argv[])
 {
+	pthread_t threads[MAX_THREADS];
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+
+	int i, j = 0;
 	
 
 	if (argc != 5)
@@ -103,25 +218,23 @@ int main(int argc, char *argv[])
 		cout << "Ex: ./osproj3 30 3 2 2 yes" << endl;
 	}
 
-	
-
-	for (i = 0; i < producerThreads; i++)
+	for (i; i < consumerThreads; i++)
 	{
-		pthread_t tid;
-		pthread_attr_t attr;
-		pthread_attr_init(&attr);
-		pthread_create(&tid, &attr, produce, NULL);
+		cThread.push_back(0);
+		consumeTid[i] = i;
+		pthread_create(&threads[i], &attr, consume, (void *)&consumeTid[i]);
 	}
 
-	for (ii = 0; ii < consumerThreads; ii++)
+	for (j; j < producerThreads; j++, i++)
 	{
-		pthread_t tid;
-		pthread_attr_t attr;
-		pthread_attr_init(&attr);
-		pthread_create(&tid, &attr, consume, NULL);
+		pThread.push_back(0);
+		produceTid[j] = j;
+		pthread_create(&threads[i], &attr, produce, (void *)&produceTid[j]);
 	}
 
-	sleep(mainSleep);
+	usleep(mainSleep);
+
+	run = false;
 
 	return 0;
 
