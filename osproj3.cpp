@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <semaphore.h>
-#include <list>
+#include <vector>
 #include <iostream>
 #include <math.h>
 
@@ -31,7 +31,7 @@ int produceTid[MAX_THREADS];
 int consumeTid[MAX_THREADS];
 int mSleep = 0, tSleep = 0;
 
-list<int> pThread, cThread;
+vector<int> pThread, cThread;
 
 string snapshot = "";
 
@@ -58,7 +58,7 @@ int initSem()
 	pthread_mutex_init(&display, NULL);
 }
 
-int buffer_remove_item(buffer_item *item)
+int buffer_remove_item(pthread_t tid)
 {
 	int consumedValue;
 
@@ -70,7 +70,7 @@ int buffer_remove_item(buffer_item *item)
 		if (displaySnapshot == 1)
 		{
 			pthread_mutex_lock(&display);
-			cout << "All buffers empty. Consumer " << *item << " waits." << endl;
+			cout << "All buffers empty. Consumer " << tid << " waits." << endl;
 			pthread_mutex_unlock(&display);
 		}
 
@@ -176,18 +176,19 @@ void dispBuf()
 void *consume(void* ctid)
 {
 	buffer_item number;
+	pthread_t self = pthread_self();
+
 	int *pointer;
 	int tid;
-	pointer = (int *) ctid;
+	pointer = (int *)ctid;
 	tid = *pointer;
-	pthread_t self = pthread_self();
 
 	do
 	{
 		sem_wait(&empty);
 		sem_wait(&mutex);
 
-		number = buffer_remove_item(&number);
+		number = buffer_remove_item(self);
 
 		sem_post(&mutex);
 		sem_post(&full);
@@ -269,12 +270,12 @@ void displayResults()
 	cout << "Size of Buffer:                        " << BUFFER_SIZE << endl << endl;
 	cout << "Total Number of Items Produced:        " << pThread.size() << endl;
 	for (int i = 0; i < producerThreads; i++) {
-		cout << "\t Thread " << i + 1 << ":" << "                     " << pThread[i] << endl;
+		//cout << "\t Thread " << i + 1 << ":" << "                     " << pThread[i] << endl;
 	}
 	cout << "Total Number of Items Consumed:        " << cThread.size() << endl;
 	cout << endl;
 	for (int i = 0; i < consumerThreads; i++) {
-		cout << "\t Thread " << i + 1 << ":" << "                     " << cThread[i] << endl;
+		//cout << "\t Thread " << i + 1 << ":" << "                     " << cThread[i] << endl;
 	}
 	cout << endl;
 	cout << "Number Of Items Remaining in Buffer:   " << count << endl;
