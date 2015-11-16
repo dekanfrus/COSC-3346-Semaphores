@@ -6,27 +6,30 @@
 #include <semaphore.h>
 #include <list>
 #include <iostream>
+#include <math.h>
 
-#define MAX_THREADS 512;
+#define MAX_THREADS 512
+#define TEN_MILLION 10000000
 
 using namespace std;
 
 buffer_item buffer[BUFFER_SIZE];
 
-sem_t mutex, full, empty;
-sem_init(&mutex, 0, 1);
-sem_init(&full, 0, 0);
-sem_init(&empty, 0, BUFFER_SIZE);
+sem_t mutex;
+sem_t full;
+sem_t empty;
 
 pthread_mutex_t display;
-pthread_mutex_init(&display, NULL);
 
-int mainSleep, threadSleep = 0;
-int producerThreads, consumerThreads = 0;
-int producePtr, consumePtr;
-int count, maxCount, minCount = 0;
+struct timespec mainSleep;
+struct timespec threadSleep;
+
+int producerThreads = 0, consumerThreads = 0;
+int producePtr = 1, consumePtr = 1;
+int count = 0, maxCount = 0, minCount = 0;
 int produceTid[MAX_THREADS];
 int consumeTid[MAX_THREADS];
+int mSleep = 0, tSleep = 0;
 
 list<int> pThread, cThread;
 
@@ -34,6 +37,26 @@ string snapshot = "";
 
 bool displaySnapshot = false;
 bool run = true;
+
+int initSem()
+{
+	if (sem_init(&mutex, 0, 1) == -1) {
+		perror("Failed to initialize semaphore");
+		return -1;
+	}
+	
+	if (sem_init(&full, 0, 1) == -1) {
+		perror("Failed to initialize semaphore");
+		return -1;
+	}
+	
+	if (sem_init(&empty, 0, BUFFER_SIZE) == -1) {
+		perror("Failed to initialize semaphore");
+		return -1;
+	}
+
+	pthread_mutex_init(&display, NULL);
+}
 
 int buffer_remove_item(buffer_item *item)
 {
@@ -73,48 +96,106 @@ int buffer_insert_item(buffer_item item)
 	}
 
 	buffer[producePtr] = item;
-	writePtr = (producePtr + 1) % BUFFER_SIZE;
+	producePtr = (producePtr + 1) % BUFFER_SIZE;
 
 	count++;
 	sem_post(&full);
 }
 
-bool getPrime(number);
+// Code found online
+bool getPrime(buffer_item number)
 {
-	bool prime = false;
+	bool prime = true;
 
-	// Check number for prime. Set the bool accordingly
-
-	if (prime)
-	{
-		return true;
-	}
-	else if (!prime)
-	{
+	if (number <= 1)
 		return false;
+	else if (number == 2)
+		return true;
+	else if (number % 2 == 0)
+		return false;
+	else
+	{
+		int divisor = 3;
+		double num_d = static_cast<double>(number);
+		int upperLimit = static_cast<int>(sqrt(num_d) + 1);
+
+		while (divisor <= upperLimit)
+		{
+			if (number % divisor == 0)
+				prime = false;
+			divisor += 2;
+		}
+		return prime;
 	}
 }
 void dispBuf()
 {
+	cout << "(buffers occupied: " << count << ")" << endl;
+	cout << "Buffers:\t";
 
+	for (int i = 0; i < BUFFER_SIZE; i++)
+	{
+		cout << buffer[i] << "\t";
+	}
 
+	cout << endl << "\t\t----\t----\t----\t----\t---" << endl;
+	cout << "\t\t";
+
+	if (count == 0)
+	{
+		for (int j = 0; j < consumePtr; j++)
+		{
+			cout << "\t";
+		}
+		cout << "WR";
+	}
+	else if (consumePtr <= producePtr)
+	{
+		for (int k = 0; k < consumePtr; k++)
+			cout << "\t";
+		cout << "R";
+
+		for (int m = consumePtr; m < producePtr; m++)
+			cout << "\t";
+		cout << "W";
+	}
+	else
+	{
+		for (int n = 0; n < producePtr; n++)
+			cout << "\t";
+		cout << "W";
+
+		for (int p = producePtr; p < consumePtr; p++)
+			cout << "\t";
+		cout << "R";
+	}
+
+	cout << endl;
 }
 
-void *consume(void *ctid)
+void *consume(void* ctid)
 {
 	buffer_item number;
+	int *pointer;
+	int tid;
+	pointer = (int *) ctid;
+	tid = *pointer;
+	pthread_t self = pthread_self();
 
-	while (run == true)
+	do
 	{
-		sem_wait(&full);
+		sem_wait(&empty);
 		sem_wait(&mutex);
 
-		number = buffer_remove_item(ctid);
+		number = buffer_remove_item(&number);
+
+		sem_post(&mutex);
+		sem_post(&full);
 
 		if (displaySnapshot == true)
 		{
 			pthread_mutex_lock(&display);
-			cout << "Consume " << tid << " reads " << numConsume;
+			cout << "Consumer " << self << " reads " << number;
 			if (getPrime(number))
 			{
 				cout << "* * * PRIME * * *" << endl;
@@ -125,17 +206,16 @@ void *consume(void *ctid)
 			}
 
 			dispBuf();
-			pthread_mutex_unlocked(&display);
+			pthread_mutex_unlock(&display);
 		}
 
-		sem_post(&mutex);
-		sem_post(&full);
+		
 
-		cThread.push[ctid];
+		cThread.push_back(self);
 
-		usleep(threadSleep);
-	}
-	
+		nanosleep(&threadSleep, NULL);
+	} while (run = true);
+
 
 
 	pthread_exit(0);
@@ -144,63 +224,96 @@ void *consume(void *ctid)
 void *produce(void *ptid)
 {
 	buffer_item number;
-	int randomNum, tid;
 
-	tid = *ptid;
+	int *pointer;
+	int tid;
+	pointer = (int *)ptid;
+	tid = *pointer;
+	pthread_t self = pthread_self();
 
-	while (run == true)
+	do 
 	{
 		number = rand() % 500;
+		sem_wait(&full);
 		sem_wait(&mutex);
 
 		buffer_insert_item(number);
 
 		sem_post(&mutex);
-		sem_post(&full);
+		sem_post(&empty);
 
 		if (displaySnapshot == true)
 		{
 			pthread_mutex_lock(&display);
-			cout << "Producer " << tid << " writes " << number << endl;
+			cout << "Producer " << self << " writes " << number << endl;
 			dispBuf();
 			pthread_mutex_unlock(&display);
 		}
 
-		pThread.push[tid];
-		usleep(threadSleep);
-		
-	}
+		pThread.push_back(self);
+		nanosleep(&threadSleep, NULL);
+
+	} while (run = true);
 
 	pthread_exit(0);
 }
 
-void dispSum
+void displayResults()
+{
+	cout << "PRODUCER / CONSUMER SIMULATION COMPLETE" << endl;
+	cout << "=======================================" << endl;
+	cout << "Simulation Time:                       " << mSleep << endl;
+	cout << "Maximum Thread Sleep Time:             " << tSleep << endl;
+	cout << "Number of Producer Threads:            " << producerThreads << endl;
+	cout << "Number of Consumer Threads:            " << consumerThreads << endl;
+	cout << "Size of Buffer:                        " << BUFFER_SIZE << endl << endl;
+	cout << "Total Number of Items Produced:        " << pThread.size() << endl;
+	for (int i = 0; i < producerThreads; i++) {
+		cout << "\t Thread " << i + 1 << ":" << "                     " << pThread[i] << endl;
+	}
+	cout << "Total Number of Items Consumed:        " << cThread.size() << endl;
+	cout << endl;
+	for (int i = 0; i < consumerThreads; i++) {
+		cout << "\t Thread " << i + 1 << ":" << "                     " << cThread[i] << endl;
+	}
+	cout << endl;
+	cout << "Number Of Items Remaining in Buffer:   " << count << endl;
+	cout << "Number Of Times Buffer Was Full:       " << maxCount << endl;
+	cout << "Number Of Times Buffer Was Empty:      " << minCount << endl;
+
+}
 
 int main(int argc, char *argv[])
 {
+	initSem();
+
 	pthread_t threads[MAX_THREADS];
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 
-	int i, j = 0;
-	
+	int i = 0, j = 0;
 
-	if (argc != 5)
+
+	if (argc != 6)
 	{
 		cout << "Not enough arguments were supplied." << endl;
 		cout << "Ex: ./osproj3 30 3 2 2 yes" << endl;
+		return 0;
 	}
 
-	mainSleep = atoi(argv[1]);
-	threadSleep = atoi(argv[2]);
+	
+	mSleep = atoi(argv[1]);
+	tSleep = atoi(argv[2]);
+
 	producerThreads = atoi(argv[3]);
 	consumerThreads = atoi(argv[4]);
-	snapshot = atoi(argv[5]);
+	snapshot = argv[5];
 
-	if (snapshot != "yes" || snapshot != "Yes" || snapshot != "No" || snapshot != "no")
+	if (snapshot != "yes") //|| snapshot != "Yes" || snapshot != "No" || snapshot != "no")
 	{
 		cout << "Invalid argument " << argv[5] << " ." << endl;
 		cout << "Ex: ./osproj3 30 3 2 2 yes" << endl;
+		return 0;
 	}
 	else if (snapshot == "yes" || snapshot == "Yes")
 	{
@@ -209,32 +322,43 @@ int main(int argc, char *argv[])
 
 	else if (snapshot != "No" || snapshot != "no")
 	{
-		displaySnapshot = false
+		displaySnapshot = false;
 	}
 
-	if (mainSleep <= 0 || threadSleep <= 0 || producerThreads <= 0 || consumerThreads <= 0)
+	if (mSleep <= 0 || tSleep <= 0 || producerThreads <= 0 || consumerThreads <= 0)
 	{
 		cout << "Invalid arguments.  Arguments must be a positive, non-zero integer." << endl;
 		cout << "Ex: ./osproj3 30 3 2 2 yes" << endl;
+		return 0;
+	}
+	else
+	{
+		mainSleep.tv_sec = atoi(argv[1]);
+		mainSleep.tv_nsec = TEN_MILLION;
+
+		threadSleep.tv_sec = atoi(argv[2]);
+		threadSleep.tv_nsec = TEN_MILLION;
 	}
 
-	for (i; i < consumerThreads; i++)
+	for (j = 0; j < producerThreads; j++)
 	{
-		cThread.push_back(0);
-		consumeTid[i] = i;
-		pthread_create(&threads[i], &attr, consume, (void *)&consumeTid[i]);
-	}
-
-	for (j; j < producerThreads; j++, i++)
-	{
-		pThread.push_back(0);
+		pthread_t tid;
 		produceTid[j] = j;
-		pthread_create(&threads[i], &attr, produce, (void *)&produceTid[j]);
+		pthread_create(&tid, &attr, produce, (void *)&produceTid[j]);
 	}
 
-	usleep(mainSleep);
+	for (i = 0; i < consumerThreads; i++)
+	{
+		pthread_t tid;
+		consumeTid[i] = i;
+		pthread_create(&tid, &attr, consume, (void *)&consumeTid[i]);
+	}
+
+	nanosleep(&mainSleep, NULL);
 
 	run = false;
+
+	displayResults();
 
 	return 0;
 
