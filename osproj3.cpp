@@ -1,3 +1,18 @@
+//*********************************************************
+//
+// John Alves
+// Operating Systems
+// Project #3: Producer Consumer With Semaphores
+// November 18, 2015
+// Instructor: Dr. Ajay K. Katangur
+// 
+//*********************************************************
+
+//*********************************************************
+//
+// Includes and Defines
+//
+//*********************************************************
 #include "buffer.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,39 +28,96 @@
 
 using namespace std;
 
+//*********************************************************
+//
+// Global variable declarations
+//
+//*********************************************************
+
+// Buffer to hold random numbers
 buffer_item buffer[BUFFER_SIZE];
 
+// Semaphores used to synchronize threads and ensure only
+// One access the buffer at a time
 sem_t mutex;
 sem_t full;
 sem_t empty;
 
+// Mutex to lock the displaying of snapshot information
 pthread_mutex_t display;
 
+// Structs to hold the sleep times for the main program
+// as well as the threads
 struct timespec mainSleep;
 struct timespec threadSleep;
 
+// Holds the number of threads the user wishes
+// to run for both producers and consumers.
+// This value comes from the command line.
 int producerThreads = 0, consumerThreads = 0;
-int producePtr = 1, consumePtr = 1;
+
+// Pointers to indicate where in the buffer
+// the current operation is taking place.
+int producePtr = 0, consumePtr = 0;
+
+// Holds values for when the buffer is empty, full
+// and and how many times for each
 int count = 0, maxCount = 0, minCount = 0;
+
+// These are used to create the threads and ensure
+// the number of threads does not exceed the max
 int produceTid[MAX_THREADS];
 int consumeTid[MAX_THREADS];
+
+// These store the integer value of time that the
+// user wishes the main program to run for, and 
+// how long the threads should sleep.
 int mSleep = 0, tSleep = 0;
 
+// Integer linked list used for holding the number of times
+// a thread successfully produces or consumes from the buffer
 list<int> pThread, cThread;
 
+// String to hold the user's decision to show the snapshot
+// while the application is running
 string snapshot = "";
 
+// Bool values to stop the application from running, and
+// whether or not to display the snapshot.
 bool displaySnapshot = false;
 bool run = true;
 
+//********************************************************************
+//
+// Buffer Remove Item Function
+//
+// 
+//
+// Value Parameters
+// ----------------
+// 
+// 
+// 
+//
+// Reference Parameters
+// --------------------
+// 
+//
+// Local Variables
+// ---------------
+// 
+// 
+//*******************************************************************
 int buffer_remove_item(pthread_t tid)
 {
 	int consumedValue;
 
+	// Decrement until 0, then lock/wait/stop
 	sem_wait(&full);
 
 	if (count == 0)
 	{
+		// Increase the number of times the buffer is empty
 		minCount++;
 		if (displaySnapshot == 1)
 		{
@@ -56,6 +128,9 @@ int buffer_remove_item(pthread_t tid)
 		sem_post(&empty);
 		return -1;
 	}
+	// Store the value that is consumed from the buffer, then move the pointer
+	// to the next location in the buffer.  Decrement count to indicate a value
+	// has been consumed and a buffer location is available
 	consumedValue = buffer[consumePtr];
 	consumePtr = (consumePtr + 1) % BUFFER_SIZE;
 	count--;
@@ -65,7 +140,27 @@ int buffer_remove_item(pthread_t tid)
 	return consumedValue;
 }
 
-
+//********************************************************************
+//
+// Buffer Insert Item Function
+//
+// 
+//
+// Value Parameters
+// ----------------
+// 
+// 
+// 
+//
+// Reference Parameters
+// --------------------
+// 
+//
+// Local Variables
+// ---------------
+// 
+// 
+//*******************************************************************
 bool buffer_insert_item(buffer_item item, pthread_t tid)
 {
 	sem_wait(&empty);
@@ -91,6 +186,7 @@ bool buffer_insert_item(buffer_item item, pthread_t tid)
 }
 
 // Code found online
+// http://www.cplusplus.com/forum/general/1125/
 bool getPrime(buffer_item number)
 {
 	bool prime = true;
@@ -116,6 +212,28 @@ bool getPrime(buffer_item number)
 		return prime;
 	}
 }
+
+//********************************************************************
+//
+// Display Buffer Function
+//
+// 
+//
+// Value Parameters
+// ----------------
+// 
+// 
+// 
+//
+// Reference Parameters
+// --------------------
+// 
+//
+// Local Variables
+// ---------------
+// 
+// 
+//*******************************************************************
 void dispBuf()
 {
 	cout << "(buffers occupied: " << count << ")" << endl;
@@ -161,6 +279,27 @@ void dispBuf()
 	cout << endl;
 }
 
+//********************************************************************
+//
+// Consume Function
+//
+// 
+//
+// Value Parameters
+// ----------------
+// 
+// 
+// 
+//
+// Reference Parameters
+// --------------------
+// 
+//
+// Local Variables
+// ---------------
+// 
+// 
+//*******************************************************************
 void *consume(void* ctid)
 {
 	buffer_item number;
@@ -174,7 +313,6 @@ void *consume(void* ctid)
 	do
 	{
 		sem_wait(&empty);
-		//sem_wait(&mutex);
 
 		number = buffer_remove_item(self);
 
@@ -199,7 +337,6 @@ void *consume(void* ctid)
 			}
 		}
 
-		//sem_post(&mutex);
 		sem_post(&full);
 
 		nanosleep(&threadSleep, NULL);
@@ -210,6 +347,27 @@ void *consume(void* ctid)
 	pthread_exit(0);
 }
 
+//********************************************************************
+//
+// Produce Function
+//
+// 
+//
+// Value Parameters
+// ----------------
+// 
+// 
+// 
+//
+// Reference Parameters
+// --------------------
+// 
+//
+// Local Variables
+// ---------------
+// 
+// 
+//*******************************************************************
 void *produce(void *ptid)
 {
 	buffer_item number = 0;
@@ -225,7 +383,6 @@ void *produce(void *ptid)
 	{
 
 		sem_wait(&full);
-		//sem_wait(&mutex);
 
 		number = rand() % 10000 + 1;
 
@@ -244,7 +401,6 @@ void *produce(void *ptid)
 			}
 		}
 
-		//sem_post(&mutex);
 		sem_post(&empty);
 
 		nanosleep(&threadSleep, NULL);
@@ -254,6 +410,27 @@ void *produce(void *ptid)
 	pthread_exit(0);
 }
 
+//********************************************************************
+//
+// Display Results Function
+//
+// 
+//
+// Value Parameters
+// ----------------
+// 
+// 
+// 
+//
+// Reference Parameters
+// --------------------
+// 
+//
+// Local Variables
+// ---------------
+// 
+// 
+//*******************************************************************
 void displayResults()
 {
 	cout << "PRODUCER / CONSUMER SIMULATION COMPLETE" << endl;
@@ -264,14 +441,14 @@ void displayResults()
 	cout << "Number of Consumer Threads:            " << consumerThreads << endl;
 	cout << "Size of Buffer:                        " << BUFFER_SIZE << endl << endl;
 	cout << "Total Number of Items Produced:        " << pThread.size() << endl;
-	for (int i = 0; i < producerThreads; i++) {
-		//cout << "\t Thread " << i + 1 << ":" << "                     " << pThread[i] << endl;
-	}
+	/*for (int i = 0; i < producerThreads; i++) {
+		cout << "\t Thread " << i + 1 << ":" << "                     " << pThread[i] << endl;
+	}*/
 	cout << "Total Number of Items Consumed:        " << cThread.size() << endl;
 	cout << endl;
-	for (int i = 0; i < consumerThreads; i++) {
-		//cout << "\t Thread " << i + 1 << ":" << "                     " << cThread[i] << endl;
-	}
+	/*for (int i = 0; i < consumerThreads; i++) {
+		cout << "\t Thread " << i + 1 << ":" << "                     " << cThread[i] << endl;
+	}*/
 	cout << endl;
 	cout << "Number Of Items Remaining in Buffer:   " << count << endl;
 	cout << "Number Of Times Buffer Was Full:       " << maxCount << endl;
@@ -279,6 +456,27 @@ void displayResults()
 
 }
 
+//********************************************************************
+//
+// Initialize Semaphores Function
+//
+// 
+//
+// Value Parameters
+// ----------------
+// 
+// 
+// 
+//
+// Reference Parameters
+// --------------------
+// 
+//
+// Local Variables
+// ---------------
+// 
+// 
+//*******************************************************************
 int initSem()
 {
 	if (sem_init(&mutex, 0, 1) == -1) {
@@ -299,6 +497,27 @@ int initSem()
 	pthread_mutex_init(&display, NULL);
 }
 
+//********************************************************************
+//
+// Main Function
+//
+// 
+//
+// Value Parameters
+// ----------------
+// 
+// 
+// 
+//
+// Reference Parameters
+// --------------------
+// 
+//
+// Local Variables
+// ---------------
+// 
+// 
+//*******************************************************************
 int main(int argc, char *argv[])
 {
 	initSem();
