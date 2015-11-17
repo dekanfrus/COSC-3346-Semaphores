@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <semaphore.h>
-#include <vector>
+#include <list>
 #include <iostream>
 #include <math.h>
 
@@ -31,32 +31,12 @@ int produceTid[MAX_THREADS];
 int consumeTid[MAX_THREADS];
 int mSleep = 0, tSleep = 0;
 
-vector<int> pThread, cThread;
+list<int> pThread, cThread;
 
 string snapshot = "";
 
 bool displaySnapshot = false;
 bool run = true;
-
-int initSem()
-{
-	if (sem_init(&mutex, 0, 1) == -1) {
-		perror("Failed to initialize semaphore");
-		return -1;
-	}
-	
-	if (sem_init(&full, 0, 1) == -1) {
-		perror("Failed to initialize semaphore");
-		return -1;
-	}
-	
-	if (sem_init(&empty, 0, BUFFER_SIZE) == -1) {
-		perror("Failed to initialize semaphore");
-		return -1;
-	}
-
-	pthread_mutex_init(&display, NULL);
-}
 
 int buffer_remove_item(pthread_t tid)
 {
@@ -70,10 +50,10 @@ int buffer_remove_item(pthread_t tid)
 		if (displaySnapshot == 1)
 		{
 			pthread_mutex_lock(&display);
-			cout << "All buffers empty. Consumer " << tid << " waits." << endl;
+			cout << "All buffers empty. Consumer " << tid << " waits." << endl << endl;
 			pthread_mutex_unlock(&display);
 		}
-
+		sem_post(&empty);
 		return -1;
 	}
 	consumedValue = buffer[consumePtr];
@@ -86,13 +66,21 @@ int buffer_remove_item(pthread_t tid)
 }
 
 
-int buffer_insert_item(buffer_item item)
+bool buffer_insert_item(buffer_item item, pthread_t tid)
 {
 	sem_wait(&empty);
+
 	if (count >= BUFFER_SIZE)
 	{
 		maxCount++;
-		return 0;
+		if (displaySnapshot == 1)
+		{
+			pthread_mutex_lock(&display);
+			cout << "All buffers full. Producer " << tid << " waits." << endl << endl;
+			pthread_mutex_unlock(&display);
+		}
+		sem_post(&full);
+		return true;
 	}
 
 	buffer[producePtr] = item;
@@ -186,30 +174,33 @@ void *consume(void* ctid)
 	do
 	{
 		sem_wait(&empty);
-		sem_wait(&mutex);
+		//sem_wait(&mutex);
 
 		number = buffer_remove_item(self);
-		cThread.push_back(self);
-
-		sem_post(&mutex);
-		sem_post(&full);
 
 		if (displaySnapshot == true)
 		{
-			pthread_mutex_lock(&display);
-			cout << "Consumer " << self << " reads " << number;
-			if (getPrime(number))
+			if (number != -1)
 			{
-				cout << "  * * * PRIME * * *" << endl;
-			}
-			else
-			{
-				cout << endl;
-			}
+				pthread_mutex_lock(&display);
+				cout << "Consumer " << self << " reads " << number;
+				if (getPrime(number))
+				{
+					cout << "  * * * PRIME * * *" << endl;
+				}
+				else
+				{
+					cout << endl;
+				}
 
-			dispBuf();
-			pthread_mutex_unlock(&display);
+				cThread.push_back(self);
+				dispBuf();
+				pthread_mutex_unlock(&display);
+			}
 		}
+
+		//sem_post(&mutex);
+		sem_post(&full);
 
 		nanosleep(&threadSleep, NULL);
 	} while (run = true);
@@ -221,33 +212,40 @@ void *consume(void* ctid)
 
 void *produce(void *ptid)
 {
-	buffer_item number;
+	buffer_item number = 0;
 
+	bool bufferFull;
 	int *pointer;
 	int tid;
 	pointer = (int *)ptid;
 	tid = *pointer;
 	pthread_t self = pthread_self();
 
-	do 
+	do
 	{
-		number = rand() % 500;
+
 		sem_wait(&full);
-		sem_wait(&mutex);
+		//sem_wait(&mutex);
 
-		buffer_insert_item(number);
-		pThread.push_back(self);
+		number = rand() % 10000 + 1;
 
-		sem_post(&mutex);
-		sem_post(&empty);
+		bufferFull = buffer_insert_item(number, self);
+
 
 		if (displaySnapshot == true)
 		{
-			pthread_mutex_lock(&display);
-			cout << "Producer " << self << " writes " << number << endl;
-			dispBuf();
-			pthread_mutex_unlock(&display);
+			if (!bufferFull)
+			{
+				pthread_mutex_lock(&display);
+				pThread.push_back(self);
+				cout << "Producer " << self << " writes " << number << endl;
+				dispBuf();
+				pthread_mutex_unlock(&display);
+			}
 		}
+
+		//sem_post(&mutex);
+		sem_post(&empty);
 
 		nanosleep(&threadSleep, NULL);
 
@@ -281,6 +279,26 @@ void displayResults()
 
 }
 
+int initSem()
+{
+	if (sem_init(&mutex, 0, 1) == -1) {
+		cout << "Failed to initialize semaphore" << endl;
+		return 0;
+	}
+
+	if (sem_init(&full, 0, 1) == -1) {
+		cout << "Failed to initialize semaphore" << endl;
+		return 0;
+	}
+
+	if (sem_init(&empty, 0, BUFFER_SIZE) == -1) {
+		cout << "Failed to initialize semaphore" << endl;
+		return 0;
+	}
+
+	pthread_mutex_init(&display, NULL);
+}
+
 int main(int argc, char *argv[])
 {
 	initSem();
@@ -299,7 +317,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	
+
 	mSleep = atoi(argv[1]);
 	tSleep = atoi(argv[2]);
 
@@ -307,7 +325,7 @@ int main(int argc, char *argv[])
 	consumerThreads = atoi(argv[4]);
 	snapshot = argv[5];
 
-	
+
 	if (snapshot == "yes" || snapshot == "Yes")
 	{
 		displaySnapshot = true;
