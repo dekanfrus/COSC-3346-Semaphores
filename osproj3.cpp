@@ -189,6 +189,7 @@ void *consume(void* ctid)
 		sem_wait(&mutex);
 
 		number = buffer_remove_item(self);
+		cThread.push_back(self);
 
 		sem_post(&mutex);
 		sem_post(&full);
@@ -199,7 +200,7 @@ void *consume(void* ctid)
 			cout << "Consumer " << self << " reads " << number;
 			if (getPrime(number))
 			{
-				cout << "* * * PRIME * * *" << endl;
+				cout << "  * * * PRIME * * *" << endl;
 			}
 			else
 			{
@@ -209,10 +210,6 @@ void *consume(void* ctid)
 			dispBuf();
 			pthread_mutex_unlock(&display);
 		}
-
-		
-
-		cThread.push_back(self);
 
 		nanosleep(&threadSleep, NULL);
 	} while (run = true);
@@ -239,6 +236,7 @@ void *produce(void *ptid)
 		sem_wait(&mutex);
 
 		buffer_insert_item(number);
+		pThread.push_back(self);
 
 		sem_post(&mutex);
 		sem_post(&empty);
@@ -251,7 +249,6 @@ void *produce(void *ptid)
 			pthread_mutex_unlock(&display);
 		}
 
-		pThread.push_back(self);
 		nanosleep(&threadSleep, NULL);
 
 	} while (run = true);
@@ -310,13 +307,8 @@ int main(int argc, char *argv[])
 	consumerThreads = atoi(argv[4]);
 	snapshot = argv[5];
 
-	if (snapshot != "yes") //|| snapshot != "Yes" || snapshot != "No" || snapshot != "no")
-	{
-		cout << "Invalid argument " << argv[5] << " ." << endl;
-		cout << "Ex: ./osproj3 30 3 2 2 yes" << endl;
-		return 0;
-	}
-	else if (snapshot == "yes" || snapshot == "Yes")
+	
+	if (snapshot == "yes" || snapshot == "Yes")
 	{
 		displaySnapshot = true;
 	}
@@ -324,6 +316,12 @@ int main(int argc, char *argv[])
 	else if (snapshot != "No" || snapshot != "no")
 	{
 		displaySnapshot = false;
+	}
+	else
+	{
+		cout << "Invalid argument " << argv[5] << " ." << endl;
+		cout << "Ex: ./osproj3 30 3 2 2 yes" << endl;
+		return 0;
 	}
 
 	if (mSleep <= 0 || tSleep <= 0 || producerThreads <= 0 || consumerThreads <= 0)
