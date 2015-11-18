@@ -19,7 +19,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <semaphore.h>
-#include <list>
+#include <vector>
 #include <iostream>
 #include <math.h>
 
@@ -64,19 +64,19 @@ int producePtr = 0, consumePtr = 0;
 // and and how many times for each
 int count = 0, maxCount = 0, minCount = 0;
 
-// These are used to create the threads and ensure
-// the number of threads does not exceed the max
-int produceTid[MAX_THREADS];
-int consumeTid[MAX_THREADS];
+// These are used to store the thread id's for both
+// consumer and producer threads
+pthread_t produceTid[MAX_THREADS];
+pthread_t consumeTid[MAX_THREADS];
 
 // These store the integer value of time that the
 // user wishes the main program to run for, and 
 // how long the threads should sleep.
 int mSleep = 0, tSleep = 0;
 
-// Integer linked list used for holding the number of times
+// Integer arrays used for holding the number of times
 // a thread successfully produces or consumes from the buffer
-list<int> pThread, cThread;
+int pThread [MAX_THREADS], cThread [MAX_THREADS];
 
 // String to hold the user's decision to show the snapshot
 // while the application is running
@@ -112,7 +112,7 @@ int buffer_remove_item(pthread_t tid)
 {
 	int consumedValue;
 
-	// Decrement until 0, then lock/wait/stop
+	// Decrement until 0, then lock
 	sem_wait(&full);
 
 	if (count == 0)
@@ -128,6 +128,13 @@ int buffer_remove_item(pthread_t tid)
 		sem_post(&empty);
 		return -1;
 	}
+
+	for (int i = 0; i < consumerThreads; i++)
+	{
+		if (consumeTid[i] == tid)
+			cThread[i] += 1;
+	}
+
 	// Store the value that is consumed from the buffer, then move the pointer
 	// to the next location in the buffer.  Decrement count to indicate a value
 	// has been consumed and a buffer location is available
@@ -176,6 +183,12 @@ bool buffer_insert_item(buffer_item item, pthread_t tid)
 		}
 		sem_post(&full);
 		return true;
+	}
+
+	for (int i = 0; i < producerThreads; i++)
+	{
+		if (produceTid[i] == tid)
+			pThread[i] += 1;
 	}
 
 	buffer[producePtr] = item;
@@ -305,10 +318,10 @@ void *consume(void* ctid)
 	buffer_item number;
 	pthread_t self = pthread_self();
 
-	int *pointer;
+	/*int *pointer;
 	int tid;
 	pointer = (int *)ctid;
-	tid = *pointer;
+	tid = *pointer;*/
 
 	do
 	{
@@ -331,7 +344,6 @@ void *consume(void* ctid)
 					cout << endl;
 				}
 
-				cThread.push_back(self);
 				dispBuf();
 				pthread_mutex_unlock(&display);
 			}
@@ -373,10 +385,10 @@ void *produce(void *ptid)
 	buffer_item number = 0;
 
 	bool bufferFull;
-	int *pointer;
+	/*int *pointer;
 	int tid;
 	pointer = (int *)ptid;
-	tid = *pointer;
+	tid = *pointer;*/
 	pthread_t self = pthread_self();
 
 	do
@@ -394,8 +406,9 @@ void *produce(void *ptid)
 			if (!bufferFull)
 			{
 				pthread_mutex_lock(&display);
-				pThread.push_back(self);
+
 				cout << "Producer " << self << " writes " << number << endl;
+				
 				dispBuf();
 				pthread_mutex_unlock(&display);
 			}
@@ -433,6 +446,20 @@ void *produce(void *ptid)
 //*******************************************************************
 void displayResults()
 {
+	int pSize, cSize;
+
+	for (int i = 0; i < producerThreads; i++)
+	{
+		if (pThread[i] != NULL)
+			pSize += pThread[i];
+	}
+
+	for (int i = 0; i < consumerThreads; i++)
+	{
+		if (cThread[i] != NULL)
+			cSize += cThread[i];
+	}
+
 	cout << "PRODUCER / CONSUMER SIMULATION COMPLETE" << endl;
 	cout << "=======================================" << endl;
 	cout << "Simulation Time:                       " << mSleep << endl;
@@ -440,15 +467,18 @@ void displayResults()
 	cout << "Number of Producer Threads:            " << producerThreads << endl;
 	cout << "Number of Consumer Threads:            " << consumerThreads << endl;
 	cout << "Size of Buffer:                        " << BUFFER_SIZE << endl << endl;
-	cout << "Total Number of Items Produced:        " << pThread.size() << endl;
-	/*for (int i = 0; i < producerThreads; i++) {
-		cout << "\t Thread " << i + 1 << ":" << "                     " << pThread[i] << endl;
-	}*/
-	cout << "Total Number of Items Consumed:        " << cThread.size() << endl;
+	cout << "Total Number of Items Produced:        " << pSize << endl;
+
+	for (int i = 0; i < producerThreads; i++) {
+	cout << "\t Thread " << i + 1 << ":" << "                     " << pThread[i] << endl;
+	}
+
 	cout << endl;
-	/*for (int i = 0; i < consumerThreads; i++) {
-		cout << "\t Thread " << i + 1 << ":" << "                     " << cThread[i] << endl;
-	}*/
+	cout << "Total Number of Items Consumed:        " << cSize << endl;
+	for (int i = 0; i < consumerThreads; i++) {
+	cout << "\t Thread " << i + 1 << ":" << "                     " << cThread[i] << endl;
+	}
+
 	cout << endl;
 	cout << "Number Of Items Remaining in Buffer:   " << count << endl;
 	cout << "Number Of Times Buffer Was Full:       " << maxCount << endl;
@@ -526,9 +556,6 @@ int main(int argc, char *argv[])
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 
-	int i = 0, j = 0;
-
-
 	if (argc != 6)
 	{
 		cout << "Not enough arguments were supplied." << endl;
@@ -576,17 +603,17 @@ int main(int argc, char *argv[])
 		threadSleep.tv_nsec = TEN_MILLION;
 	}
 
-	for (j = 0; j < producerThreads; j++)
+	for (int j = 0; j < producerThreads; j++)
 	{
 		pthread_t tid;
-		produceTid[j] = j;
+		produceTid[j] = tid;
 		pthread_create(&tid, &attr, produce, (void *)&produceTid[j]);
 	}
 
-	for (i = 0; i < consumerThreads; i++)
+	for (int i = 0; i < consumerThreads; i++)
 	{
 		pthread_t tid;
-		consumeTid[i] = i;
+		consumeTid[i] = tid;
 		pthread_create(&tid, &attr, consume, (void *)&consumeTid[i]);
 	}
 
