@@ -78,6 +78,9 @@ int mSleep = 0, tSleep = 0;
 // a thread successfully produces or consumes from the buffer
 int pThread [MAX_THREADS], cThread [MAX_THREADS];
 
+
+int pSize = 0, cSize = 0;
+
 // String to hold the user's decision to show the snapshot
 // while the application is running
 string snapshot = "";
@@ -318,10 +321,12 @@ void *consume(void* ctid)
 	buffer_item number;
 	pthread_t self = pthread_self();
 
-	/*int *pointer;
+	int *pointer;
 	int tid;
 	pointer = (int *)ctid;
-	tid = *pointer;*/
+	tid = *pointer;
+
+	consumeTid[tid] = self;
 
 	do
 	{
@@ -343,6 +348,8 @@ void *consume(void* ctid)
 				{
 					cout << endl;
 				}
+				
+				cSize++;
 
 				dispBuf();
 				pthread_mutex_unlock(&display);
@@ -385,11 +392,15 @@ void *produce(void *ptid)
 	buffer_item number = 0;
 
 	bool bufferFull;
-	/*int *pointer;
+
+	int *pointer;
 	int tid;
 	pointer = (int *)ptid;
-	tid = *pointer;*/
+	tid = *pointer;
+
 	pthread_t self = pthread_self();
+
+	produceTid[tid] = self;	
 
 	do
 	{
@@ -411,6 +422,8 @@ void *produce(void *ptid)
 				
 				dispBuf();
 				pthread_mutex_unlock(&display);
+
+				pSize++;
 			}
 		}
 
@@ -446,19 +459,6 @@ void *produce(void *ptid)
 //*******************************************************************
 void displayResults()
 {
-	int pSize, cSize;
-
-	for (int i = 0; i < producerThreads; i++)
-	{
-		if (pThread[i] != NULL)
-			pSize += pThread[i];
-	}
-
-	for (int i = 0; i < consumerThreads; i++)
-	{
-		if (cThread[i] != NULL)
-			cSize += cThread[i];
-	}
 
 	cout << "PRODUCER / CONSUMER SIMULATION COMPLETE" << endl;
 	cout << "=======================================" << endl;
@@ -606,14 +606,14 @@ int main(int argc, char *argv[])
 	for (int j = 0; j < producerThreads; j++)
 	{
 		pthread_t tid;
-		produceTid[j] = tid;
+		produceTid[j] = j;
 		pthread_create(&tid, &attr, produce, (void *)&produceTid[j]);
 	}
 
 	for (int i = 0; i < consumerThreads; i++)
 	{
 		pthread_t tid;
-		consumeTid[i] = tid;
+		consumeTid[i] = i;
 		pthread_create(&tid, &attr, consume, (void *)&consumeTid[i]);
 	}
 
