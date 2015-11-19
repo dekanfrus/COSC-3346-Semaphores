@@ -5,5 +5,3 @@ Contains the code necessary to create a buffer and the insert/remove function pr
 osproj3.cpp
 
 Contains the main program.  It acceps command line arguments from the user upon execution.  You must indicate five things.  The main program sleep time, the thread sleep time, how many producer threads, how many consumer threads, and whether or not you would like to see a snapshot of the output.
-
-Overall, this project was challenging, however I believe I have been able to accomplish all of the requirements.
